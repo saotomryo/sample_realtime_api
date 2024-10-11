@@ -1,5 +1,3 @@
-
-
 import websocket
 import json
 import threading
@@ -21,6 +19,8 @@ def load_api_key(file_path):
 audio_output_data = b''
 audio_lock = threading.Lock()
 is_running = True  # フラグを追加して、ループを制御
+last_message_time = time.time()  # 最後のメッセージのタイムスタンプ
+timeout_seconds = 300  # 5分（300秒）でタイムアウト
 
 # ロボットの動作を定義
 def move_forward():
