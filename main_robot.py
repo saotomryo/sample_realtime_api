@@ -65,11 +65,15 @@ def send_function_call_output(ws, item_id, function_name, arguments):
 def on_message(ws, message):
     global audio_output_data  # global宣言を追加
     event = json.loads(message)
-    print("受信したイベント:", event)
+    #print("受信したイベント:", event)
+    # print(event['item']['type'])
 
     if event['type'] == 'conversation.item.created':
+
         item = event['item']
         if item['type'] == 'function_call':
+            print('Function_call:')
+            print(event)
             function_call = item['content'][0]
             function_name = function_call['name']
             arguments = function_call.get('arguments', {})
@@ -80,6 +84,8 @@ def on_message(ws, message):
 
             
     elif event['type'] == 'response.audio.delta':
+        #print('Audio 受信:')
+        #print(event)
         # 受信した音声データを追加
         try:
             audio_chunk_base64 = event['content']['audio']
@@ -88,20 +94,25 @@ def on_message(ws, message):
         audio_chunk = base64.b64decode(audio_chunk_base64)
         audio_output_data += audio_chunk  # グローバル変数に追加
     elif event['type'] == 'response.audio.done':
+        print('Audio　受信完了')
         # 音声データの受信が完了したら再生
         play_audio_data(audio_output_data)
         audio_output_data = b''  # バッファをクリア
     # 音声データが含まれるイベントが受信されたとき
     elif event['type'] == 'response.output_item.done':
         for content_item in event['item']['content']:
+            #print('response.output_item.done')
+            #print(event)
             if content_item['type'] == 'audio':
                 # 音声データが含まれている場合、その音声を再生
                 transcript = content_item.get('transcript', '')
                 print(f"音声の内容: {transcript}")
-                play_audio_data(transcript)  # 音声データを再生する関数
+                play_audio_data(content_item['audio'])  # 音声データを再生する関数
 
     elif event['type'] == 'error':
         print("エラーが発生しました:", event['error'])
+    else:
+        print(event)
 
 def on_error(ws, error):
     print("WebSocketエラー:", error)
@@ -118,17 +129,27 @@ def on_open(ws):
     event = {
         'type': 'session.update',
         'session': {
-            'instructions': '''あなたはロボットアシスタントです。
-                  あなたは日本語で応答してください。会話はすべて日本語で行われます。
-                  ロボットの前進、後退、写真撮影をサポートします。''',
-            'default_response': {
-                'language': 'ja',  # 日本語（ja）を指定
-                'modalities': ['audio']  # 音声応答を指定
-            },
+            'modalities': ['audio', 'text'],
+            'instructions': '''あなたはロボットAIです。
+                  日本語で応答してください。会話はすべて日本語で行われます。
+                  ロボットとして、会話を行い、指示された動作を実施します。
+                  前進、後退、写真を撮ることが出来ます。''',
+            "output_audio_format": "pcm16",
+            "voice": "alloy",
+            # 'default_response': {
+            #     'language': 'ja',  # 日本語（ja）を指定
+            #     #'modalities': ['audio']  # 音声応答を指定
+            # },
+            }
+    }
+    function_event = {
+        'type': 'session.update',
+        'session':{
             'tools': [
                 {
+                    'type':'function',
                     'name': 'move_forward',
-                    'description': 'ロボットを前進させます',
+                    'description': '前進します。',
                     'parameters': {
                         'type': 'object',
                         'properties': {},
@@ -136,8 +157,9 @@ def on_open(ws):
                     }
                 },
                 {
+                    'type':'function',
                     'name': 'move_backward',
-                    'description': 'ロボットを後退させます',
+                    'description': '後退します。',
                     'parameters': {
                         'type': 'object',
                         'properties': {},
@@ -145,19 +167,22 @@ def on_open(ws):
                     }
                 },
                 {
+                    'type':'function',
                     'name': 'take_picture',
-                    'description': 'ロボットのカメラで写真を撮影します',
+                    'description': '写真を撮影します',
                     'parameters': {
                         'type': 'object',
                         'properties': {},
                         'required': []
                     }
                 }
-            ]
-            
+            ],
+            "tool_choice": "auto",
+            "temperature": 0.8
         }
     }
     ws.send(json.dumps(event))
+    ws.send(json.dumps(function_event))
 
     # 音声入力を開始
     threading.Thread(target=record_audio, args=(ws,)).start()
